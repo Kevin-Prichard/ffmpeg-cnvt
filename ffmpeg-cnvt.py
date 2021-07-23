@@ -64,10 +64,16 @@ ATTACHTYPE_DEFAULT = "application/octet-stream"
 SPECIAL_CHARS = " $^'"
 
 AUDIO_CODECS = ["aac", "ac3", "eac3", "dts", "flac", "opus", "mp3", "wav"]
+AUDIO_CODECS_LONG = ["AAC (Advanced Audio Coding)", "AC3 (Dolby Digital)", "E-AC3 (Dolby Digital+)", "DCA (DTS Coherent Acoustics)",
+                     "FLAC (Free Lossless Audio Codec)", "libopus Opus", "libmp3lame MP3 (MPEG audio layer 3)", "WavPack"]
+VIDEO_CODECS = ["h264", "h265", "h264nv", "h265nv", "vp8", "vp9"]
+VIDEO_CODECS_LONG = ["libx264 H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10", "libx265 H.265 / HEVC",
+                     "NVIDIA NVENC H.264 encoder", "NVIDIA NVENC hevc encoder", "libvpx VP8", "libvpx VP9"]
 VIDEO_PRESET_ARGS = ["h264", "h265", "h264nv", "h265nv"]
 VIDEO_CRF_ARGS = ["h264", "h265", "vp8", "vp9"]
-VIDEO_CODECS = list(set(VIDEO_PRESET_ARGS) | set(VIDEO_CRF_ARGS))
 SUBTITLE_CODECS = ["ssa", "ass", "dvbsub", "dvdsub", "srt", "sub"]
+SUBTITLE_CODECS_LONG = ["ASS (Advanced SubStation Alpha) subtitle", "ASS (Advanced SubStation Alpha) subtitle",
+                        "DVB subtitles", "DVD subtitles", "SubRip subtitle", "SubRip subtitle"]
 CONTAINER_ARGS = ["mov", "mkv", "mp4"]
 RES_ARGS = ["hd", "fhd", "qhd", "uhd"]
 DEPTH_ARGS = ["8bit", "10bit"]
@@ -77,9 +83,13 @@ CHANNELS_ARGS = ["mono", "stereo"]
 STREAM_TYPES_LONG = ["video", "audio", "subtitle", "attachment", "data"]
 STREAM_TYPES_SHORT = ["v", "a", "s", "t", "d"]
 STREAM_TYPES_DICT = dict(zip(STREAM_TYPES_SHORT, STREAM_TYPES_LONG))
+CODEC_STREAM_TYPES = ["v", "a", "s"]
 PRESET_CHOICES = ["slowest", "slow", "medium", "fast", "default", "hp", "hq", "bd", "ll",
                   "llhq", "llhp", "lossless", "losslesshp", "p1", "p2", "p3", "p4", "p5", "p6", "p7"]
 TUNE_CHOICES = ["hq", "ll", "ull", "lossless", "psnr", "ssim"]
+
+CODEC_DICT = {'v': dict(zip(VIDEO_CODECS, VIDEO_CODECS_LONG)), 'a': dict(zip(
+    AUDIO_CODECS, AUDIO_CODECS_LONG)), 's': dict(zip(SUBTITLE_CODECS, SUBTITLE_CODECS_LONG))}
 
 
 # Bit of a hacky way of validating argparse nargs=2
@@ -149,6 +159,30 @@ def ValidateStreamCodecArg(value):
     return value
 
 
+# Displays info about codecs
+def display_codec_info():
+    print("Codecs currently supported by ffmpeg-cnvt:\n")
+    for spec, codec_dict in CODEC_DICT.items():
+        print("({}) {} codecs:".format(spec, STREAM_TYPES_DICT[spec]))
+        # print(codec_dict)
+        for short, long in codec_dict.items():
+            print("{} - {}".format(short, long))
+        print()
+
+
+# Displays codecs info
+class CodecsAction(argparse.Action):
+    def __init__(self, option_strings, dest, nargs=None, **kwargs):
+        if nargs is not None:
+            raise ValueError("nargs not allowed")
+        super().__init__(option_strings, dest, **kwargs)
+        self.nargs = 0
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        display_codec_info()
+        parser.exit()
+
+
 # Creates and populates the argparse ArgumentParser
 def create_argparser():
 
@@ -167,10 +201,12 @@ def create_argparser():
     parser.add_argument("output", help="Output file or directory.")
     parser.add_argument('-container', choices=CONTAINER_ARGS,
                         help="Specify output container.")
+    parser.add_argument('-codecs', action=CodecsAction,
+                        help="Display available codecs")
     parser.add_argument('-codec', nargs=2, action='append', type=ValidateStreamCodecArg, metavar=(list_to_choice_str(
-        STREAM_TYPES_SHORT), 'CODEC'), help="Process streams of a type from primary input with encoding codec. *")
+        CODEC_STREAM_TYPES), 'CODEC'), help="Process streams of a type from primary input with encoding codec. *")
     parser.add_argument('-bitrate', nargs=2, action='append', type=ValidateStreamStringArg, metavar=(list_to_choice_str(
-        STREAM_TYPES_SHORT), 'RATE'), help="Set bitrate for streams of a type.  Can be in the form 1M or 300K. *")
+        CODEC_STREAM_TYPES), 'RATE'), help="Set bitrate for streams of a type.  Can be in the form 1M or 300K. *")
     parser.add_argument('-lang', nargs=2, action='append', type=ValidateStreamStringArg, metavar=(list_to_choice_str(
         STREAM_TYPES_SHORT), 'LANG'), help="Set language for primary streams of a type. *")
     parser.add_argument('-nocopy', choices=STREAM_TYPES_SHORT + ['c', 'm'], action='append',
@@ -182,7 +218,7 @@ def create_argparser():
     parser.add_argument('-addfile', nargs=2, action='append', type=ValidateStreamFileArg, metavar=(list_to_choice_str(
         STREAM_TYPES_SHORT), 'INDEX'), help="Add streams of a type from a second input file. *")
     parser.add_argument('-addcodec', nargs=2, action='append', type=ValidateStreamCodecArg, metavar=(list_to_choice_str(
-        STREAM_TYPES_SHORT), 'CODEC'), help="Codec to be used for added streams of a type. *")
+        CODEC_STREAM_TYPES), 'CODEC'), help="Codec to be used for added streams of a type. *")
     parser.add_argument('-addstream', nargs=2, action='append', type=ValidateStreamIntArg, metavar=(list_to_choice_str(
         STREAM_TYPES_SHORT), 'INDEX'), help="When adding streams from a file, process a single stream instead of all streams. *")
     parser.add_argument('-addfirst', choices=STREAM_TYPES_SHORT, action='append',
@@ -237,7 +273,7 @@ def create_argparser():
     parser.add_argument("-sequence", action="store_true",
                         help="Input is a printf formatted image sequence.")
     parser.add_argument("-framerate", default="30000/1001",
-                        help="Output frame rate, can be numerator/denominator (default=30000/1001).")
+                        help="Input frame rate, can be numerator/denominator (default=30000/1001).")
     parser.add_argument('-nounknown', action="store_true",
                         help="Strip unknown data from output.")
     parser.add_argument(
@@ -269,7 +305,6 @@ def create_argparser():
                         help="File to output logging to (default=~/{}).".format(LOG_FILENAME))
     parser.add_argument('-suffix', action="store_true",
                         help="Add suffix to file name showing encoding options.")
-
     return parser
 
 
@@ -661,6 +696,7 @@ def check_valid_arguments(args):
 
     check_dependent_args(args, ["crop"], RES_ARGS + ["width", "height"])
     check_dependent_args(args, ["addlooped"], LENGTH_ARGS)
+    check_dependent_args(args, ["framerate"], ["sequence"])
 
     # Arguments that are mutually exclusive
     check_arg_stream_exclusive(args, ["nocopy", "codec"])
@@ -669,6 +705,7 @@ def check_valid_arguments(args):
 
     check_exclusive_args(args, RES_ARGS + ["width"])
     check_exclusive_args(args, RES_ARGS + ["height"])
+    check_exclusive_args(args, LENGTH_ARGS)
 
 
 # Returns extension of output container based on args or input filename
@@ -709,7 +746,7 @@ def get_dimensions_from_args(args):
 
 
 # Returns the number of streams of each type for a file in a dictionary
-# { 'v':1, 'a':2, 's':3, 'a':0, 'd':0 }
+# { 'v':1, 'a':2, 's':3, 't':0, 'd':0 }
 def get_stream_count_map_from_input(args, input_file):
     if args.verbose:
         print("Probing stream counts from {}".format(input_file))

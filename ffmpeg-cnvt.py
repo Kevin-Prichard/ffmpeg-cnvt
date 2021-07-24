@@ -53,6 +53,8 @@ python ffmpeg-cnvt.py input_file.mkv output_file.mkv -addattach cover.jpg -attac
 python ffmpeg-cnvt.py input_file.mkv output_file.mkv -addfile a input_file.mkv -addcodec a aac
 """
 
+HELP_DESCRIPTION = 'Perform media conversions and muxing with ffmpeg.'
+
 LOG_FILENAME = "ffmpeg-cnvt.log"
 LOG_RETRY_COUNT = 5
 LOG_RETRY_DELAY = 0.3
@@ -193,7 +195,7 @@ def create_argparser():
         ' '.join(["{}={}".format(s, l) for s, l in STREAM_TYPES_DICT.items()]))
     epilog += HELP_EPILOG
 
-    parser = argparse.ArgumentParser(description='Convert video with ffmpeg.',
+    parser = argparse.ArgumentParser(description=HELP_DESCRIPTION,
                                      epilog=epilog, formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('--version', action="version", version=__version__)
     parser.add_argument(
@@ -696,7 +698,7 @@ def check_valid_arguments(args):
 
     check_dependent_args(args, ["crop"], RES_ARGS + ["width", "height"])
     check_dependent_args(args, ["addlooped"], LENGTH_ARGS)
-    check_dependent_args(args, ["framerate"], ["sequence"])
+    # check_dependent_args(args, ["framerate"], ["sequence"])
 
     # Arguments that are mutually exclusive
     check_arg_stream_exclusive(args, ["nocopy", "codec"])
@@ -813,7 +815,7 @@ def stream_map_args(spec, file_index, none, stream_num, first_stream, stream_cou
 
 
 # Returns command line elements for a primary map
-def stream_map(primary, args, stream_type, input_streams, first_stream, input_file):
+def stream_map(primary, args, stream_type, input_streams, first_stream, input_file, input_file_index):
     if primary:
         encoder = stream_type_arg(args.codec, stream_type)
     else:
@@ -851,7 +853,7 @@ def stream_map(primary, args, stream_type, input_streams, first_stream, input_fi
         args.addlang, stream_type)
     metadata = None if not language else "language=" + language
 
-    return stream_map_args(stream_type, 0, stream_type_bool(args.nocopy, stream_type),
+    return stream_map_args(stream_type, input_file_index, stream_type_bool(args.nocopy, stream_type),
                            stream_type_arg(args.singlestream, stream_type), first_stream, input_streams, encoder_list, metadata, default_stream)
 
 
@@ -1045,7 +1047,7 @@ def process_input(input_files, args):
 
             # Secondary inputs
             for stream_type in STREAM_TYPES_SHORT:
-                if stream_type_bool(args.addfile, stream_type):
+                if stream_type_arg(args.addfile, stream_type):
                     if stream_type_bool(args.addlooped, stream_type):
                         cmdline += ["-stream_loop", "-1"]
                     cmdline += ["-i",
@@ -1060,9 +1062,10 @@ def process_input(input_files, args):
                 add_file = stream_type_arg(args.addfile, stream_type)
                 input_add_streams = 0
                 if add_file:
+                    input_file_index += 1
                     if args.verbose:
-                        print("Probing {} stream count from {}".format(
-                            STREAM_TYPES_DICT[stream_type], add_file))
+                        print("Probing {} stream count from {} (added file #{}".format(
+                            STREAM_TYPES_DICT[stream_type], add_file, input_file_index))
                     input_add_streams = probe_stream_count(
                         args.verbose, args.ffprobebin, add_file, STREAM_TYPES_DICT[stream_type])
 
@@ -1089,18 +1092,18 @@ def process_input(input_files, args):
                     # Add primary streams first
                     if input_streams:
                         cmdline += stream_map(True, args, stream_type,
-                                              input_streams, 0, input_file)
+                                              input_streams, 0, input_file, 0)
                     if input_add_streams:
                         cmdline += stream_map(False, args, stream_type, input_add_streams,
-                                              input_streams, add_file)
+                                              input_streams, add_file, input_file_index)
                 else:
                     # Add secondary streams first
                     if input_add_streams:
                         cmdline += stream_map(False, args, stream_type,
-                                              input_add_streams, 0, add_file)
+                                              input_add_streams, 0, add_file, input_file_index)
                     if input_streams_counts[stream_type]:
                         cmdline += stream_map(True, args, stream_type,
-                                              input_streams, input_add_streams, input_file)
+                                              input_streams, input_add_streams, input_file, 0)
 
             # Video filters
             if not stream_type_bool(args.nocopy, 'v'):
@@ -1136,11 +1139,11 @@ def process_input(input_files, args):
                 cmdline += ["-t", args.duration]
 
             # Strip chapters
-            if not stream_type_bool(args.nocopy, 'c'):
+            if stream_type_bool(args.nocopy, 'c'):
                 cmdline += ["-map_chapters", "-1"]
 
             # Strip metadata
-            if not stream_type_bool(args.nocopy, 'm'):
+            if stream_type_bool(args.nocopy, 'm'):
                 cmdline += ["-map_metadata", "-1"]
 
             # Add metadata attachment

@@ -40,7 +40,7 @@ python ffmpeg-cnvt.py /in/*.mkv /out -container mp4 -codec a aac -codec v h264 -
 . Convert video streams to h265, copy all other streams:
 python ffmpeg-cnvt.py input_file.mkv output_file.mkv -codec v h265 -crf 17
 . Extract a specific audio stream to mp3 file:
-python ffmpeg-cnvt.py input_file.mkv output_file.mp3 -codec a mp3 -singlestream a 0 -nocopy v -nocopy s 
+python ffmpeg-cnvt.py input_file.mkv output_file.mp3 -codec a mp3 -singlestream a 0 -nocopy v -nocopy s
 . Convert JPEG image sequence to UHD h265 rec709 video by croppping images in the center:
 python ffmpeg-cnvt.py /imgs/TLPS%04d.JPG output_file.mp4 -sequence -crop center -uhd -vcodec h265 -sdr -8bit
 . Output mp4 with video/chapters/subtitles from input_video.mp4 and audio from input_audio.mp3 looped:
@@ -107,7 +107,7 @@ def static_vars(**kwargs):
 @static_vars(firstarg=True)
 def ValidateStreamIntArg(value):
     if ValidateStreamIntArg.firstarg:
-        if not value in STREAM_TYPES_SHORT:
+        if value not in STREAM_TYPES_SHORT:
             raise ValueError("Invalid stream type: {}".format(value))
     else:
         value = int(value)
@@ -119,7 +119,7 @@ def ValidateStreamIntArg(value):
 @static_vars(firstarg=True)
 def ValidateStreamFileArg(value):
     if ValidateStreamFileArg.firstarg:
-        if not value in STREAM_TYPES_SHORT:
+        if value not in STREAM_TYPES_SHORT:
             raise ValueError("Invalid stream type: {}".format(value))
     else:
         argparse.FileType('r')(value)
@@ -131,7 +131,7 @@ def ValidateStreamFileArg(value):
 @static_vars(firstarg=True)
 def ValidateStreamStringArg(value):
     if ValidateStreamStringArg.firstarg:
-        if not value in STREAM_TYPES_SHORT:
+        if value not in STREAM_TYPES_SHORT:
             raise ValueError("Invalid stream type: {}".format(value))
     ValidateStreamStringArg.firstarg = not ValidateStreamStringArg.firstarg
     return value
@@ -141,18 +141,18 @@ def ValidateStreamStringArg(value):
 @static_vars(lasttype=None)
 def ValidateStreamCodecArg(value):
     if not ValidateStreamCodecArg.lasttype:
-        if not value in STREAM_TYPES_SHORT:
+        if value not in STREAM_TYPES_SHORT:
             raise ValueError("Invalid stream type: {}".format(value))
         ValidateStreamCodecArg.lasttype = value
     else:
         if 'v' == ValidateStreamCodecArg.lasttype:
-            if not value in VIDEO_CODECS:
+            if value not in VIDEO_CODECS:
                 raise ValueError("Invalid video codec: {}".format(value))
         elif 'a' == ValidateStreamCodecArg.lasttype:
-            if not value in AUDIO_CODECS:
+            if value not in AUDIO_CODECS:
                 raise ValueError("Invalid audio codec: {}".format(value))
         elif 's' == ValidateStreamCodecArg.lasttype:
-            if not value in SUBTITLE_CODECS:
+            if value not in SUBTITLE_CODECS:
                 raise ValueError("Invalid subtitle codec: {}".format(value))
         else:
             raise ValueError("Codecs not currently supported for stream type {}".format(
@@ -188,8 +188,8 @@ class CodecsAction(argparse.Action):
 # Creates and populates the argparse ArgumentParser
 def create_argparser():
 
-    def list_to_choice_str(l):
-        return "{" + ','.join(l) + "}"
+    def list_to_choice_str(choices):
+        return "{" + ','.join(choices) + "}"
 
     epilog = "\n(Stream types: {} m=metadata c=chapters)\n".format(
         ' '.join(["{}={}".format(s, l) for s, l in STREAM_TYPES_DICT.items()]))
@@ -358,7 +358,7 @@ def printf_filename(input_path):
         return input_path
     try:
         chars = int(input_path[pct_pos + 1:d_pos])
-    except:
+    except ValueError:
         print("Unable to parse printf %01d string in path")
         return input_path
 
@@ -496,7 +496,7 @@ def video_codec_to_encoder(codec, args):
     if codec is None:
         return ["copy"]
 
-    if not codec in VIDEO_CODECS:
+    if codec not in VIDEO_CODECS:
         raise Exception("Invalid video codec: {}".format(codec))
 
     # Video codec
@@ -560,7 +560,7 @@ def audio_codec_to_encoder(codec, args):
     if codec is None:
         return ["copy"]
 
-    if not codec in AUDIO_CODECS:
+    if codec not in AUDIO_CODECS:
         raise Exception("Invalid audio codec: {}".format(codec))
 
     # Audio codec
@@ -589,7 +589,7 @@ def subtitle_codec_to_encoder(codec, args):
     if codec is None:
         return ["copy"]
 
-    if not codec in SUBTITLE_CODECS:
+    if codec not in SUBTITLE_CODECS:
         raise Exception("Invalid subtitle codec: {}".format(codec))
 
     if "sub" == codec:
@@ -1006,14 +1006,13 @@ def process_input(input_files, args):
 
     # Loop through input
     for input_file in input_files:
-        input_file_index = 0
         job_num += 1
         timer_job_start = time.time()
 
         # Make sure input filename contains a period
         _, input_filename = os.path.split(input_file)
 
-        if not '.' in input_filename:
+        if '.' not in input_filename:
             print("Input file name contains no extension: {}".format(input_file))
             err_count += 1
             continue
